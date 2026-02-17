@@ -1,0 +1,13 @@
+{
+  "name": "mail-report-server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "mail-report.js",
+  "scripts": {
+    "start": "node mail-report.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "nodemailer": "^6.9.8"
+  }
+}
