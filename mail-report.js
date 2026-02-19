@@ -7,7 +7,7 @@ app.use(cors());
 app.use(express.json());
 
 const transporter = nodemailer.createTransport({
-  host: "ssl0.ovh.net",
+  host: "smtp.mail.ovh.net",
   port: 465,
   secure: true,
   auth: {
