@@ -1,38 +1,17 @@
-import nodemailer from "nodemailer";
 import express from "express";
 import cors from "cors";
 
 const app = express();
 
-// 1. CONFIGURATION DE SÉCURITÉ (CORS)
-app.use(cors({
-  origin: '*', 
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// 2. CONFIGURATION DU TRANSPORTEUR BREVO (PASSAGE SUR PORT 465 SSL)
-const transporter = nodemailer.createTransport({
-  host: "smtp-relay.brevo.com",
-  port: 465,             // Port sécurisé direct
-  secure: true,          // Doit être true pour le port 465
-  auth: {
-    user: process.env.BREVO_USER,
-    pass: process.env.BREVO_SMTP_KEY
-  },
-  connectionTimeout: 15000, // On laisse 15 secondes pour établir la connexion
-  greetingTimeout: 10000,
-  socketTimeout: 15000
-});
-
-// 3. PAGE D'ACCUEIL
+// PAGE D'ACCUEIL
 app.get("/", (req, res) => {
-  res.send("<h1>Serveur RadioTask Mail</h1><p>Statut : Opérationnel (SSL Actif)</p>");
+  res.send("<h1>Serveur RadioTask Mail (API Mode)</h1><p>Prêt à envoyer via Brevo API.</p>");
 });
 
-// 4. ROUTE D'ENVOI DU SIGNALEMENT
+// ROUTE D'ENVOI DU SIGNALEMENT VIA API BREVO
 app.post("/report", async (req, res) => {
   const { subject, text } = req.body;
 
@@ -41,27 +20,40 @@ app.post("/report", async (req, res) => {
   }
 
   try {
-    const info = await transporter.sendMail({
-      from: `"Signalement RadioTask" <${process.env.BREVO_USER}>`,
-      to: "panne@radiologie-lyon.com", 
-      subject: subject,
-      text: text,
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "accept": "application/json",
+        "content-type": "application/json",
+        "api-key": process.env.BREVO_SMTP_KEY // Ta clé api-key (xkeysib...)
+      },
+      body: JSON.stringify({
+        sender: { 
+          name: "Signalement RadioTask", 
+          email: process.env.BREVO_USER // Ton email validé (radiologuesmermoz@gmail.com)
+        },
+        to: [{ email: "panne@radiologie-lyon.com" }],
+        subject: subject,
+        textContent: text
+      })
     });
 
-    console.log("Email envoyé avec succès :", info.messageId);
-    res.status(200).json({ message: "Succès", id: info.messageId });
+    const data = await response.json();
+
+    if (response.ok) {
+      console.log("Email envoyé via API :", data.messageId);
+      res.status(200).json({ message: "Succès", id: data.messageId });
+    } else {
+      throw new Error(JSON.stringify(data));
+    }
 
   } catch (err) {
-    console.error("ERREUR ENVOI MAIL :", err);
-    res.status(500).json({ 
-      error: "Erreur lors de l'envoi", 
-      details: err.message 
-    });
+    console.error("ERREUR API BREVO :", err.message);
+    res.status(500).json({ error: "Échec de l'envoi via API", details: err.message });
   }
 });
 
-// 5. DÉMARRAGE DU SERVEUR
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Serveur actif sur le port ${PORT}`);
+  console.log(`Serveur API actif sur le port ${PORT}`);
 });
