@@ -6,58 +6,59 @@ const app = express();
 
 // 1. CONFIGURATION DE SÉCURITÉ (CORS)
 app.use(cors({
-  origin: '*',
+  origin: '*', // Autorise ton app Stackblitz à communiquer avec Render
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
 
-// 2. CONFIGURATION DU TRANSPORTEUR (PORT 587 - STARTTLS)
-// C'est la configuration la plus robuste pour éviter le "Délai dépassé"
+// 2. CONFIGURATION DU TRANSPORTEUR BREVO
+// Utilise les variables d'environnement que tu as créées sur Render
 const transporter = nodemailer.createTransport({
-  host: "ssl0.ovh.net",
+  host: "smtp-relay.brevo.com",
   port: 587,
-  secure: false, // Doit être false pour le port 587
+  secure: false, // TLS via STARTTLS
   auth: {
-    user: "panne@radiologie-lyon.com",
-    pass: process.env.OVH_MAIL_PASSWORD
-  },
-  tls: {
-    // Aide à la connexion sur les réseaux Cloud (Render)
-    rejectUnauthorized: false,
-    minVersion: "TLSv1.2"
-  },
-  debug: true, 
-  logger: true 
+    user: process.env.BREVO_USER,      // Ton email d'inscription Brevo
+    pass: process.env.BREVO_SMTP_KEY   // Ta clé API xsmtpsib...
+  }
 });
 
-// 3. ROUTE D'ACCUEIL (Test simple)
+// 3. ROUTE DE VÉRIFICATION (Affichée quand tu vas sur l'URL Render)
 app.get("/", (req, res) => {
-  res.send("Serveur de signalement actif (Port 587). Prêt à envoyer.");
+  res.send("<h1>Serveur de Mail Actif</h1><p>Statut : Prêt à envoyer via Brevo.</p>");
 });
 
-// 4. ROUTE D'ENVOI DU MAIL
+// 4. ROUTE D'ENVOI DU SIGNALEMENT
 app.post("/report", async (req, res) => {
   const { subject, text } = req.body;
 
+  // Vérification basique des données reçues
   if (!subject || !text) {
-    return res.status(400).json({ error: "Données manquantes" });
+    console.log("Données reçues incomplètes");
+    return res.status(400).json({ error: "Sujet ou texte manquant" });
   }
 
   try {
     const info = await transporter.sendMail({
-      from: '"Alerte Panne" <panne@radiologie-lyon.com>',
-      to: "panne@radiologie-lyon.com",
+      // IMPORTANT : L'adresse 'from' doit être validée dans ton compte Brevo
+      // Par défaut, utilise l'email avec lequel tu as créé ton compte Brevo
+      from: `"Signalement Panne" <${process.env.BREVO_USER}>`,
+      to: "panne@radiologie-lyon.com", 
       subject: subject,
       text: text,
     });
 
     console.log("Email envoyé avec succès :", info.messageId);
-    res.status(200).json({ message: "Email envoyé avec succès", id: info.messageId });
+    res.status(200).json({ 
+      message: "Succès", 
+      id: info.messageId 
+    });
 
   } catch (err) {
-    console.error("ERREUR SMTP DÉTAILLÉE :", err);
+    // Si une erreur survient, elle sera détaillée dans les logs de Render
+    console.error("ERREUR LORS DE L'ENVOI :", err);
     res.status(500).json({ 
       error: "Échec de l'envoi", 
       details: err.message 
@@ -68,5 +69,5 @@ app.post("/report", async (req, res) => {
 // 5. DÉMARRAGE DU SERVEUR
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Serveur prêt sur le port ${PORT}`);
+  console.log(`Serveur démarré et écoute sur le port ${PORT}`);
 });
