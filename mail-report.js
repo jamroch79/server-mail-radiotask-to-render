@@ -5,7 +5,6 @@ import cors from "cors";
 const app = express();
 
 // 1. CONFIGURATION DE SÉCURITÉ (CORS)
-// On autorise tout le monde (*) pour le test, puis on restreindra si besoin
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'OPTIONS'],
@@ -14,66 +13,60 @@ app.use(cors({
 
 app.use(express.json());
 
-// 2. CONFIGURATION DU TRANSPORTEUR OVH
-// On utilise ssl0.ovh.net qui est le serveur le plus stable
+// 2. CONFIGURATION DU TRANSPORTEUR (PORT 587 - STARTTLS)
+// C'est la configuration la plus robuste pour éviter le "Délai dépassé"
 const transporter = nodemailer.createTransport({
   host: "ssl0.ovh.net",
-  port: 465,
-  secure: true, // true pour le port 465
+  port: 587,
+  secure: false, // Doit être false pour le port 587
   auth: {
     user: "panne@radiologie-lyon.com",
     pass: process.env.OVH_MAIL_PASSWORD
   },
   tls: {
-    // Cette option évite les erreurs de certificat SSL fréquentes sur les serveurs mutualisés
-    rejectUnauthorized: false
+    // Aide à la connexion sur les réseaux Cloud (Render)
+    rejectUnauthorized: false,
+    minVersion: "TLSv1.2"
   },
-  // Debug : affiche les détails de la connexion dans les logs Render
   debug: true, 
   logger: true 
 });
 
-// 3. ROUTE DE TEST (Vérification du réveil du serveur)
+// 3. ROUTE D'ACCUEIL (Test simple)
 app.get("/", (req, res) => {
-  res.send("Serveur de signalement actif sur Render. Prêt à envoyer.");
+  res.send("Serveur de signalement actif (Port 587). Prêt à envoyer.");
 });
 
-// 4. ROUTE D'ENVOI DU SIGNALEMENT
+// 4. ROUTE D'ENVOI DU MAIL
 app.post("/report", async (req, res) => {
   const { subject, text } = req.body;
 
-  // Sécurité : Vérifier que les données arrivent bien
   if (!subject || !text) {
-    console.error("Données manquantes dans la requête");
-    return res.status(400).json({ error: "Sujet ou texte manquant" });
+    return res.status(400).json({ error: "Données manquantes" });
   }
 
   try {
-    // Envoi du mail
     const info = await transporter.sendMail({
-      from: '"Alerte Panne" <panne@radiologie-lyon.com>', // L'expéditeur DOIT être l'adresse OVH
-      to: "panne@radiologie-lyon.com", 
+      from: '"Alerte Panne" <panne@radiologie-lyon.com>',
+      to: "panne@radiologie-lyon.com",
       subject: subject,
       text: text,
     });
 
     console.log("Email envoyé avec succès :", info.messageId);
-    res.status(200).send("Email envoyé avec succès");
+    res.status(200).json({ message: "Email envoyé avec succès", id: info.messageId });
 
   } catch (err) {
-    // On log l'erreur complète pour la voir dans l'onglet Logs de Render
     console.error("ERREUR SMTP DÉTAILLÉE :", err);
-    
     res.status(500).json({ 
       error: "Échec de l'envoi", 
-      message: err.message,
-      code: err.code 
+      details: err.message 
     });
   }
 });
 
-// 5. LANCEMENT DU SERVEUR SUR LE PORT RENDER
+// 5. DÉMARRAGE DU SERVEUR
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Serveur démarré sur le port ${PORT}`);
+  console.log(`Serveur prêt sur le port ${PORT}`);
 });
