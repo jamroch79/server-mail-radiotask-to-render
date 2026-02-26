@@ -5,7 +5,6 @@ import cors from "cors";
 const app = express();
 
 // 1. CONFIGURATION DE SÉCURITÉ (CORS)
-// Permet à ton application React de communiquer avec ce serveur
 app.use(cors({
   origin: '*', 
   methods: ['GET', 'POST', 'OPTIONS'],
@@ -14,43 +13,42 @@ app.use(cors({
 
 app.use(express.json());
 
-// 2. CONFIGURATION DU TRANSPORTEUR BREVO
-// Les variables sont récupérées de manière sécurisée depuis Render
+// 2. CONFIGURATION DU TRANSPORTEUR BREVO (PASSAGE SUR PORT 465 SSL)
 const transporter = nodemailer.createTransport({
   host: "smtp-relay.brevo.com",
-  port: 587,
-  secure: false, 
+  port: 465,             // Port sécurisé direct
+  secure: true,          // Doit être true pour le port 465
   auth: {
-    user: process.env.BREVO_USER,     // Doit être radiologuesmermoz@gmail.com sur Render
-    pass: process.env.BREVO_SMTP_KEY   // Ta clé API xsmtpsib... sur Render
-  }
+    user: process.env.BREVO_USER,
+    pass: process.env.BREVO_SMTP_KEY
+  },
+  connectionTimeout: 15000, // On laisse 15 secondes pour établir la connexion
+  greetingTimeout: 10000,
+  socketTimeout: 15000
 });
 
-// 3. PAGE D'ACCUEIL (Pour vérifier que le serveur tourne)
+// 3. PAGE D'ACCUEIL
 app.get("/", (req, res) => {
-  res.send("<h1>Serveur RadioTask Mail</h1><p>Statut : Opérationnel</p>");
+  res.send("<h1>Serveur RadioTask Mail</h1><p>Statut : Opérationnel (SSL Actif)</p>");
 });
 
 // 4. ROUTE D'ENVOI DU SIGNALEMENT
 app.post("/report", async (req, res) => {
   const { subject, text } = req.body;
 
-  // Sécurité : Vérifier que les données ne sont pas vides
   if (!subject || !text) {
     return res.status(400).json({ error: "Données manquantes" });
   }
 
   try {
     const info = await transporter.sendMail({
-      // L'expéditeur est ton adresse validée dans Brevo (via la variable Render)
       from: `"Signalement RadioTask" <${process.env.BREVO_USER}>`,
-      // Le destinataire final
       to: "panne@radiologie-lyon.com", 
       subject: subject,
       text: text,
     });
 
-    console.log("Email envoyé :", info.messageId);
+    console.log("Email envoyé avec succès :", info.messageId);
     res.status(200).json({ message: "Succès", id: info.messageId });
 
   } catch (err) {
